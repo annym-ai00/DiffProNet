@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+import os.path as osp
+import random
 
 from models.resnet import resnet12
 from models.FDH import FeatureDenoisingHead
@@ -232,7 +234,7 @@ if __name__ == '__main__':
     parser.add_argument('--image-size', type=int, default=84)
     # ssl
     parser.add_argument('--use_ssl', type=bool, default=True)
-    parser.add_argument('--beta', type=float, default=0.1)
+    parser.add_argument('--beta', type=float, default=0.7)
     # network
     parser.add_argument('--max-epoch', type=int, default=30)
     parser.add_argument('--lr', type=float, default=0.0005)
