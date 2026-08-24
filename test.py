@@ -34,7 +34,7 @@ def main(args):
     model = resnet12(avg_pool=True, drop_rate=0.1, dropblock_size=5, num_classes=n_cls).cuda()
 
     # check resume point
-    checkpoint_file = os.path.join(args.save_path, 'max-test-acc.pth')
+    checkpoint_file = os.path.join(args.save_path, 'max-acc.pth')
     if os.path.isfile(checkpoint_file):
         checkpoint = torch.load(checkpoint_file)
         model.load_state_dict(checkpoint)
