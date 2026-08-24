@@ -7,6 +7,8 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from models.resnet import resnet12
+from models.FDH import FeatureDenoisingHead
+
 from dataset.datasets import DatasetLoader
 from dataset.samplers import CategoriesSampler
 from utils import seed_torch, set_gpu, ensure_path, Averager, count_acc, euclidean_metric, Timer, compute_confidence_interval
@@ -46,10 +48,10 @@ def main(args):
     train_loader, val_loader, n_cls = get_dataset(args)
    
     model = resnet12(avg_pool=True, drop_rate=0.1, dropblock_size=5, num_classes=n_cls).cuda()
-    diffusion_head = ProgressiveDiffusionHead(feat_dim=120).cuda()
+    d_head = FeatureDenoisingHead(feat_dim=n_cls).cuda()
 
-    optimizer = torch.optim.Adam(list(model.parameters()) + list(diffusion_head.parameters()), lr=args.lr, weight_decay=args.wd)
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.1, verbose=True)
+    optimizer = torch.optim.Adam(list(model.parameters()) + list(d_head.parameters()), lr=args.lr, weight_decay=args.wd)
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.1)
     
     def save_model(name):
         torch.save(model.state_dict(), os.join(args.save_path, name + '.pth'))
@@ -135,27 +137,11 @@ def main(args):
             
         print("------------------------------------------------------\n")
 
-class ProgressiveDiffusionHead(nn.Module):
-    def __init__(self, feat_dim, hidden_dim=512):
-        super().__init__()
-        self.mlp = nn.Sequential(
-            nn.Linear(feat_dim, hidden_dim),
-            nn.SiLU(),
-            nn.Linear(hidden_dim, feat_dim)
-        )
-
-    def forward(self, x, t):
-        noise = torch.randn_like(x)
-        noisy_x = x + (t * noise)
-        pred_noise = self.mlp(noisy_x)
-        loss = F.mse_loss(pred_noise, noise)
-        return loss
-
-def train(args, model, train_loader, optimizer, diffusion_head=None):
+def train(args, model, train_loader, optimizer, d_head=None):
     model.train()
 
-    if diffusion_head is not None:
-        diffusion_head.train()
+    if d_head is not None:
+        d_head.train()
 
     tl = Averager()
     ta = Averager()
@@ -173,10 +159,10 @@ def train(args, model, train_loader, optimizer, diffusion_head=None):
         label = torch.arange(args.train_way).repeat(args.train_query)
         label = label.type(torch.cuda.LongTensor)
 
-        # ---- Diffusion SSL ----
-        if args.use_ssl and diffusion_head is not None:
-            t = torch.rand(feat_shot.size(0), 1, device=feat_shot.device)  # random timestep ∈ [0,1]
-            ssl_loss = diffusion_head(feat_shot, t)
+        # ---- Denoising SSL ----
+        if args.use_ssl and d_head is not None:
+            t = torch.rand(feat_shot.size(0), 1, device=feat_shot.device)  # random noise level ∈ [0,1]
+            ssl_loss = d_head(feat_shot, t)
         else:
             ssl_loss = torch.tensor(0.0, device=feat_shot.device)
 
@@ -254,7 +240,6 @@ if __name__ == '__main__':
     parser.add_argument('--step-size', type=int, default=10)
     parser.add_argument('--train-batch', type=int, default=10000) #every epoch consist 1000 episode, total 30 epoch, so 30000 episode
     parser.add_argument('--valid-batch', type=int, default=600)
-    parser.add_argument('--test-batch', type=int, default=600)
     args, _ = parser.parse_known_args()
     
     # Create the directory if it doesn't exist
