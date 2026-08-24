@@ -12,7 +12,7 @@ class FeatureDenoisingHead(nn.Module):
         )
 
     def forward(self, x, t):
-        # x: features, t: timestep (scalar or tensor)
+        # x: features, t: noise level (scalar)
         # Add Gaussian noise to features based on t
         noise = torch.randn_like(x)
         noisy_x = x + (t * noise)
